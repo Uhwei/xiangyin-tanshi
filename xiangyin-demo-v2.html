@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乡音探事｜灰盒Demo（杂货店→龙眼林→礁石→汇报发证）</title>
+<style>
+*{box-sizing:border-box;font-family:system-ui, "PingFang SC",sans-serif;}
+body{margin:0;padding:16px;background:#f7f2e9;color:#222;}
+.wrap{max-width:920px;margin:0 auto;}
+header{border-bottom:1px solid #b8a894;padding-bottom:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;}
+h1{font-size:22px;margin:0;}
+.ctrl-bar{display:flex;gap:8px;flex-wrap:wrap;}
+button{padding:7px 12px;border:none;border-radius:6px;background:#6b4c39;color:#fff;cursor:pointer;font-size:14px;}
+button.sec{background:#8c705c;}
+button.warn{background:#945038;}
+.box{background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px;margin:10px 0;}
+.hidden{display:none;}
+.scene-opt{display:block;padding:9px;border:1px solid #ccc;border-radius:6px;margin:5px 0;cursor:pointer;}
+.scene-opt:hover{background:#f0e9df;}
+.wordcard{display:inline-block;padding:6px 10px;background:#e8e2d8;border-radius:5px;margin:4px;cursor:pointer;}
+.wordcard.active{background:#d4c8b8;}
+.log{font-family:monospace;font-size:12px;color:#444;white-space:pre-wrap;max-height:220px;overflow-y:auto;background:#f8f8f8;padding:8px;border-radius:4px;}
+.param-panel{position:fixed;right:12px;bottom:12px;width:320px;border:1px solid #aaa;background:#fff;border-radius:8px;padding:10px;font-size:12px;z-index:99;}
+.param-panel h4{margin:0 0 6px;}
+.tag-good{color:#2b7c36;font-weight:bold;}
+.tag-ok{color:#1f5b99;font-weight:bold;}
+.tag-none{color:#777;}
+.tag-fail{color:#a82c2c;font-weight:bold;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>乡音探事 · 灰盒原型</h1>
+  <div class="ctrl-bar">
+    <button onclick="goto('home')">据点</button>
+    <button onclick="goto('scene')">调查现场</button>
+    <button onclick="goto('report')">卷宗汇报</button>
+    <button onclick="goto('bag')">包裹</button>
+    <button class="sec" onclick="resetAll()">重置本局</button>
+  </div>
+</header>
+
+<!-- 据点主页 -->
+<div id="home" class="page">
+  <div class="box">
+    <h2>调查员据点</h2>
+    <p>委托：后埕村夜间异响传闻。走访三处地点：杂货店、龙眼林、礁石滩。搜集线索、查阅方言词卡，最后提交卷宗汇报。</p>
+    <p>规则：一共11个目标关键词。<br>
+    第1/2次提交：≥9关键词命中 + 选定结论句 → 地道/通过<br>
+    第3次及之后重试：≥6关键词命中 + 选定结论句 → 通过<br>
+    录音仅保存回放，不参与判定。</p>
+    <div>
+      <button onclick="startCase()">接取委托，出发调查</button>
+    </div>
+  </div>
+  <div class="box">
+    <h3>🎙 录音面板</h3>
+    <button id="recBtn" onclick="toggleRec()">开始录音</button>
+    <button class="sec" onclick="playRec()">回放录音</button>
+    <p id="recTip">未录音</p>
+  </div>
+</div>
+
+<!-- 调查场景：多地点切换 -->
+<div id="scene" class="page hidden">
+  <div class="box">
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <button onclick="switchScene('shop')">杂货店</button>
+      <button onclick="switchScene('forest')">龙眼林</button>
+      <button onclick="switchScene('rock')">礁石滩</button>
+    </div>
+    <h3 id="sceneTitle">杂货店</h3>
+    <div id="sceneDialogue"></div>
+    <div id="sceneReply"></div>
+    <div class="box">
+      <h4>方言词卡（点击查看白话字+释义，统计查看次数）</h4>
+      <div id="wordCards"></div>
+    </div>
+    <div class="box">
+      <h4>已收集线索</h4>
+      <div id="clueList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 卷宗汇报 -->
+<div id="report" class="page hidden">
+  <div class="box">
+    <h2>卷宗汇报</h2>
+    <p>选择你搜集到的关键词，再选择结论，提交审核。本局重试次数：<span id="retryCount">0</span></p>
+    <div id="kwSelect"></div>
+    <div class="box">
+      <h4>结论句（三档批注）</h4>
+      <div class="scene-opt" onclick="setConclusion('地道：异响是潮水与风声叠加，无妖魔')">地道：异响是潮水与风声叠加，无妖魔</div>
+      <div class="scene-opt" onclick="setConclusion('通过：夜间声响来自自然环境，无异常')">通过：夜间声响来自自然环境，无异常</div>
+      <div class="scene-opt" onclick="setConclusion('无加分：暂时无法判断传闻真假')">无加分：暂时无法判断传闻真假</div>
+      <p>已选结论：<span id="conclusionShow">未选择</span></p>
+    </div>
+    <button onclick="submitReport()">提交卷宗</button>
+    <div id="reportResult" class="box"></div>
+  </div>
+</div>
+
+<!-- 包裹/证件 -->
+<div id="bag" class="page hidden">
+  <div class="box">
+    <h2>包裹与证件</h2>
+    <div id="bagContent"></div>
+  </div>
+</div>
+
+<!-- 右下角原型参数面板 -->
+<div class="param-panel">
+  <h4>原型参数 & 本局日志</h4>
+  <div>目标关键词总数：11</div>
+  <div>前2次门槛：≥9</div>
+  <div>第3次起门槛：≥6</div>
+  <div>结论档位：地道 / 通过 / 无加分</div>
+  <div class="log" id="gameLog"></div>
+  <button class="sec" onclick="toggleParam()">收起面板</button>
+</div>
+</div>
+
+<script>
+// ========== 全局状态 ==========
+let state = {
+  sceneId:"shop",
+  clues:[],
+  selectedKw:[],
+  conclusion:"",
+  retryCount:0,
+  hasCert:false,
+  wordViewCount:{},
+  log:[],
+  recStream:null,
+  recChunks:[],
+  recPlaying:false
+};
+const allKeywords = [
+  "昨夜风声","潮水声响","礁石回音","阿伯无见外人",
+  "龙眼林无脚印","露水痕迹","浪声时辰","无魔神仔",
+  "村落临海","风穿林隙","传闻以讹传讹"
+];
+const wordLibrary = [
+  {k:"昨暗暝",p:"tsa̍h-àm-mî",d:"昨晚"},
+  {k:"伫佗位",p:"tī to̍h ūi",d:"在哪里"},
+  {k:"知影",p:"tsai-iáⁿ",d:"知道"},
+  {k:"吼",p:"hó",d:"吼叫、呼啸"},
+  {k:"暝时",p:"mî-sî",d:"夜里"},
+  {k:"浪",p:"lōng",d:"海浪"}
+];
+const sceneData = {
+  shop:{
+    title:"杂货店",
+    opts:[
+      {txt:"问：昨暗暝有看着啥无？",reply:"昨暗暝无看着生人，只听风伫吼。",clue:"阿伯无见外人"},
+      {txt:"问：暝时有没有奇怪人影？",reply:"无，我拢伫店内，门窗拢关牢牢。",clue:""},
+      {txt:"问：最近海边浪敢会大？",reply:"这几日潮水大，暝时浪声真清楚。",clue:"潮水声响"}
+    ]
+  },
+  forest:{
+    title:"龙眼林",
+    opts:[
+      {txt:"问：林内有脚印抑是痕迹无？",reply:"地上只有露水，无外人脚印。",clue:"龙眼林无脚印"},
+      {txt:"问：风伫林内听着敢会变声？",reply:"风穿树隙，听着像人声。",clue:"风穿林隙"},
+      {txt:"问：有没有看着啥物件？",reply:"拢无，只有龙眼树叶晃来晃去。",clue:"露水痕迹"}
+    ]
+  },
+  rock:{
+    title:"礁石滩",
+    opts:[
+      {txt:"问：礁石边听着啥声音？",reply:"浪拍礁石，回音重重，听着像人叫。",clue:"礁石回音"},
+      {txt:"问：啥时辰浪声上明显？",reply:"天未光的时阵，浪声上清楚。",clue:"浪声时辰"},
+      {txt:"问：这个村落是不是临海？",reply:"是，咱这倚海，风跟浪拢真常。",clue:"村落临海"}
+    ]
+  }
+};
+
+// ========== 页面路由 ==========
+function goto(id){
+  document.querySelectorAll(".page").forEach(p=>p.classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+  renderAll();
+}
+function renderAll(){
+  renderScene();
+  renderWordCards();
+  renderClues();
+  renderReportKw();
+  renderBag();
+  renderLog();
+  document.getElementById("retryCount").innerText = state.retryCount;
+  document.getElementById("conclusionShow").innerText = state.conclusion || "未选择";
+}
+function addLog(text){
+  const t = new Date().toLocaleTimeString();
+  state.log.push(`[${t}] ${text}`);
+  renderLog();
+}
+function renderLog(){
+  document.getElementById("gameLog").innerText = state.log.join("\n");
+}
+
+// ========== 场景系统 ==========
+function startCase(){
+  state = {
+    sceneId:"shop",
+    clues:[],
+    selectedKw:[],
+    conclusion:"",
+    retryCount:0,
+    hasCert:false,
+    wordViewCount:{},
+    log:[],
+    recStream:null,
+    recChunks:[],
+    recPlaying:false
+  };
+  addLog("本局委托开始");
+  goto("scene");
+}
+function switchScene(sid){
+  state.sceneId = sid;
+  addLog(`切换场景：${sid}`);
+  renderScene();
+}
+function renderScene(){
+  const s = sceneData[state.sceneId];
+  document.getElementById("sceneTitle").innerText = s.title;
+  let html = "";
+  s.opts.forEach(o=>{
+    html += `<div class="scene-opt" onclick="sceneTalk('${o.txt}','${o.reply}','${o.clue}')">${o.txt}</div>`
+  });
+  document.getElementById("sceneDialogue").innerHTML = html;
+}
+function sceneTalk(txt,reply,clue){
+  document.getElementById("sceneReply").innerHTML = `<div class="box">NPC：${reply}</div>`;
+  if(clue && !state.clues.includes(clue)){
+    state.clues.push(clue);
+    addLog(`获得线索：${clue}`);
+  }else if(clue){
+    addLog(`线索【${clue}】已收集过`);
+  }else{
+    addLog(`对话：${txt}，无新增线索`);
+  }
+  renderClues();
+}
+function renderClues(){
+  document.getElementById("clueList").innerText = state.clues.length ? state.clues.join("；") : "尚未搜集到线索";
+}
+
+// ========== 词卡系统（点击展开白话字+释义，统计查看次数） ==========
+function renderWordCards(){
+  let html = "";
+  wordLibrary.forEach(w=>{
+    const cnt = state.wordViewCount[w.k]||0;
+    html += `<div class="wordcard" onclick="openWord('${w.k}','${w.p}','${w.d}')">${w.k} (查看:${cnt})</div>`
+  });
+  document.getElementById("wordCards").innerHTML = html;
+}
+function openWord(k,p,d){
+  state.wordViewCount[k] = (state.wordViewCount[k]||0)+1;
+  addLog(`查阅词卡：${k} → ${p}｜${d}`);
+  alert(`【${k}】\n白话字：${p}\n释义：${d}`);
+  renderWordCards();
+}
+
+// ========== 汇报判定 ==========
+function renderReportKw(){
+  let html = "";
+  allKeywords.forEach(kw=>{
+    const sel = state.selectedKw.includes(kw);
+    html += `<div class="scene-opt ${sel?'active':''}" onclick="toggleKw('${kw}')">${kw}</div>`
+  })
+  document.getElementById("kwSelect").innerHTML = html;
+}
+function toggleKw(kw){
+  const idx = state.selectedKw.indexOf(kw);
+  if(idx>=0) state.selectedKw.splice(idx,1);
+  else state.selectedKw.push(kw);
+  addLog(`关键词选择：${kw} ${idx>=0?"取消":"选中"}`);
+  renderReportKw();
+}
+function setConclusion(txt){
+  state.conclusion = txt;
+  addLog(`选定结论：${txt}`);
+  renderAll();
+}
+function submitReport(){
+  if(!state.conclusion){
+    alert("请先选择结论句");
+    return;
+  }
+  state.retryCount++;
+  const hit = state.selectedKw.length;
+  let threshold = state.retryCount <=2 ? 9 :6;
+  let pass = hit >= threshold;
+  let grade = "";
+  let resHtml = "";
+  if(!pass){
+    grade = "不通过";
+    resHtml = `<span class="tag-fail">审核不通过</span><br>命中关键词：${hit}，门槛需要${threshold}。请重新走访搜集线索。`;
+  }else{
+    if(state.conclusion.startsWith("地道")){
+      grade = "地道";
+      state.hasCert = true;
+      resHtml = `<span class="tag-good">✅ 地道评价，审核通过，发放见习调查员证！</span><br>命中关键词：${hit}/${allKeywords.length}，结论：${state.conclusion}`;
+    }else if(state.conclusion.startsWith("通过")){
+      grade = "通过";
+      state.hasCert = true;
+      resHtml = `<span class="tag-ok">✅ 通过，发放见习调查员证</span><br>命中关键词：${hit}/${allKeywords.length}，结论：${state.conclusion}`;
+    }else{
+      grade = "无加分";
+      resHtml = `<span class="tag-none">审核通过，但结论无加分，不发证</span><br>命中关键词：${hit}/${allKeywords.length}，结论：${state.conclusion}`;
+    }
+  }
+  addLog(`提交汇报｜重试${state.retryCount}｜命中${hit}｜门槛${threshold}｜档位：${grade}`);
+  document.getElementById("reportResult").innerHTML = resHtml;
+  renderBag();
+}
+
+// ========== 包裹&证件 ==========
+function renderBag(){
+  let html = "";
+  html += `<div>已收集线索：${state.clues.join("、")||"无"}</div>`;
+  html += `<div>词卡查阅记录：${JSON.stringify(state.wordViewCount)}</div>`;
+  if(state.hasCert){
+    html += `<div class="box tag-good">📜 见习调查员证 已发放</div>`;
+  }else{
+    html += `<div>暂未获得证件</div>`;
+  }
+  document.getElementById("bagContent").innerHTML = html;
+}
+
+// ========== 录音（仅本地回放，不判定） ==========
+let mediaRec = null;
+async function toggleRec(){
+  if(!mediaRec || mediaRec.state === "inactive"){
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    mediaRec = new MediaRecorder(stream);
+    state.recChunks = [];
+    mediaRec.ondataavailable = e=>state.recChunks.push(e.data);
+    mediaRec.start();
+    document.getElementById("recBtn").innerText = "停止录音";
+    document.getElementById("recTip").innerText = "录音中...";
+    addLog("开始录音");
+  }else{
+    mediaRec.stop();
+    document.getElementById("recBtn").innerText = "开始录音";
+    document.getElementById("recTip").innerText = "录音已保存，可回放";
+    addLog("停止录音");
+  }
+}
+function playRec(){
+  if(!state.recChunks.length){
+    alert("没有录音");
+    return;
+  }
+  const blob = new Blob(state.recChunks,{type:"audio/webm"});
+  const au = new Audio(URL.createObjectURL(blob));
+  au.play();
+  addLog("回放录音");
+}
+function toggleParam(){
+  const p = document.querySelector(".param-panel");
+  p.style.display = p.style.display === "none" ? "block" : "none";
+}
+function resetAll(){
+  if(confirm("确认重置本局全部进度？")) startCase();
+}
+goto("home");
+</script>
+</body>
+</html>
